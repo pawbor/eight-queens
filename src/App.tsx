@@ -1,45 +1,18 @@
 import React, { Component } from "react";
+
+import {
+  BoardDescriptor,
+  SquareDescriptor,
+  RowDescriptor,
+  SquareContent,
+  SquareColor,
+  BoardState,
+  SquareId,
+  SquareCoordinates
+} from "./types";
+
 import "./App.css";
-
-enum SquareColor {
-  Black = "black",
-  White = "white"
-}
-
-enum SquareContent {
-  Empty = "Empty",
-  Queen = "Queen",
-  Blocked = "Blocked"
-}
-
-interface SquareCoordinates {
-  rowIndex: number;
-  columnIndex: number;
-}
-
-interface SquareId extends SquareCoordinates {
-  key: string;
-  diagonalIndices: [number, number];
-}
-
-interface BoardDescriptor {
-  rows: RowDescriptor[];
-}
-
-interface RowDescriptor {
-  index: number;
-  squares: SquareDescriptor[];
-}
-
-interface SquareDescriptor {
-  squareId: SquareId;
-  color: SquareColor;
-  content: SquareContent;
-}
-
-interface BoardState {
-  queens: SquareId[];
-}
+import { Board } from "./Board";
 
 const boardSize = 8;
 
@@ -118,7 +91,10 @@ function removeQueenFromBoard(
   };
 }
 
-function createBoardDescriptor(boardState: BoardState, boardSize: number) {
+function createBoardDescriptor(
+  boardState: BoardState,
+  boardSize: number
+): BoardDescriptor {
   return {
     rows: Array.from({ length: boardSize }, (_, index) =>
       createRowDescriptor({ boardState, boardSize, index })
@@ -130,7 +106,7 @@ function createRowDescriptor(params: {
   boardState: BoardState;
   index: number;
   boardSize: number;
-}) {
+}): RowDescriptor {
   const { boardState, index, boardSize } = params;
   return {
     index,
@@ -233,67 +209,6 @@ function computeBlockedDiagonals({ queens }: BoardState) {
   return queens
     .map(squareId => squareId.diagonalIndices)
     .reduce((prev, next) => prev.concat(next), [] as number[]);
-}
-
-function Board(params: { descriptor: BoardDescriptor; onSquareClick: any }) {
-  const { descriptor, onSquareClick } = params;
-  const rows = descriptor.rows.map(rowState => (
-    <Row
-      key={rowState.index}
-      descriptor={rowState}
-      onSquareClick={onSquareClick}
-    />
-  ));
-  return <div className="Board">{rows}</div>;
-}
-
-function Row(params: {
-  descriptor: RowDescriptor;
-  onSquareClick: (square: SquareDescriptor) => {};
-}) {
-  const { descriptor, onSquareClick } = params;
-  const squares = descriptor.squares.map(square => (
-    <Square
-      key={square.squareId.key}
-      descriptor={square}
-      onClick={() => onSquareClick(square)}
-    />
-  ));
-  return <div className="Row">{squares}</div>;
-}
-
-const colorToClass = {
-  [SquareColor.Black]: "Square--black",
-  [SquareColor.White]: "Square--white"
-};
-
-const contentToComponent: Record<SquareContent, () => any> = {
-  [SquareContent.Empty]: EmptySquare,
-  [SquareContent.Queen]: Queen,
-  [SquareContent.Blocked]: BlockedSquare
-};
-
-function Square(params: { descriptor: SquareDescriptor; onClick: () => {} }) {
-  const { descriptor, onClick } = params;
-  const colorClass = colorToClass[descriptor.color];
-  const Content = contentToComponent[descriptor.content];
-  return (
-    <div className={`Square ${colorClass}`} onClick={onClick}>
-      <Content />
-    </div>
-  );
-}
-
-function EmptySquare() {
-  return <span style={{ opacity: 0.5 }}>X</span>;
-}
-
-function Queen() {
-  return <span style={{ color: "red" }}>Q</span>;
-}
-
-function BlockedSquare() {
-  return null;
 }
 
 export default App;
