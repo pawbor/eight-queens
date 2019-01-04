@@ -20,9 +20,9 @@ type NodesSet<NodeT> = Map<NodeT, NodeMeta<NodeT>>;
 export default function aStar<NodeT>(params: {
   startNode: NodeT;
   graphTools: GraphTools<NodeT>;
-}) {
+}): NodeT[] {
   const { startNode, graphTools } = params;
-  const { estimateGoalDistance } = graphTools;
+  const { checkIfGoalReached, estimateGoalDistance } = graphTools;
   const nodesSet: NodesSet<NodeT> = new Map();
   nodesSet.set(startNode, {
     node: startNode,
@@ -32,30 +32,21 @@ export default function aStar<NodeT>(params: {
     previousNodeMeta: undefined,
   });
 
-  return loop({ nodesSet, graphTools });
-}
+  while (true) {
+    const cheapestNodeMeta = findCheapest(nodesSet);
+    if (!cheapestNodeMeta) {
+      return [];
+    }
 
-function loop<NodeT>(params: {
-  nodesSet: NodesSet<NodeT>;
-  graphTools: GraphTools<NodeT>;
-}): NodeT[] {
-  const { nodesSet, graphTools } = params;
+    cheapestNodeMeta.closed = true;
 
-  const { checkIfGoalReached } = graphTools;
+    const isGoalReached = checkIfGoalReached(cheapestNodeMeta.node);
+    if (isGoalReached) {
+      return findPath(cheapestNodeMeta, nodesSet);
+    }
 
-  return Maybe(findCheapest(nodesSet))
-    .map((cheapestNodeMeta) => {
-      cheapestNodeMeta.closed = true;
-
-      const isGoalReached = checkIfGoalReached(cheapestNodeMeta.node);
-      if (isGoalReached) {
-        return findPath(cheapestNodeMeta, nodesSet);
-      }
-
-      addNeighbors(nodesSet, cheapestNodeMeta, graphTools);
-      return loop({ nodesSet, graphTools });
-    })
-    .getValue([]);
+    addNeighbors(nodesSet, cheapestNodeMeta, graphTools);
+  }
 }
 
 function findCheapest<NodeT>(

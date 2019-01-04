@@ -1,4 +1,5 @@
-import React, { Component } from "react";
+import React, { Component } from 'react';
+import Maybe from '@pawbor/maybe';
 
 import {
   BoardDescriptor,
@@ -8,11 +9,13 @@ import {
   SquareColor,
   BoardState,
   SquareId,
-  SquareCoordinates
-} from "./types";
+  SquareCoordinates,
+} from './types';
 
-import "./App.css";
-import { Board } from "./Board";
+import { findNQueensProblemSolution } from './n-queens-problem';
+import { Board } from './Board';
+
+import './App.css';
 
 const boardSize = 8;
 
@@ -21,14 +24,14 @@ class App extends Component<{}, { boardState: BoardState }> {
     super(props);
 
     this.state = {
-      boardState: createEmptyBoardState()
+      boardState: createBoardStateWithSolution(),
     };
   }
 
   handleSquareClick = (clickedSquare: SquareDescriptor) => {
     const boardState = updateBoardState(this.state.boardState, clickedSquare);
     this.setState({
-      boardState
+      boardState,
     });
   };
 
@@ -49,9 +52,22 @@ class App extends Component<{}, { boardState: BoardState }> {
   }
 }
 
-function createEmptyBoardState() {
+function createBoardStateWithSolution(): BoardState {
+  return Maybe(findNQueensProblemSolution(boardSize))
+    .map((queensCoordinates) =>
+      queensCoordinates.map(({ row, column }) =>
+        retrieveSquareId({ rowIndex: row, columnIndex: column })
+      )
+    )
+    .map((queens) => ({
+      queens,
+    }))
+    .getValue(createEmptyBoardState());
+}
+
+function createEmptyBoardState(): BoardState {
   return {
-    queens: []
+    queens: [],
   };
 }
 
@@ -76,7 +92,7 @@ function addQueenToBoard(
   const { squareId } = clickedSquare;
   const updatedQueens = [...boardState.queens, squareId];
   return {
-    queens: updatedQueens
+    queens: updatedQueens,
   };
 }
 
@@ -85,9 +101,9 @@ function removeQueenFromBoard(
   clickedSquare: SquareDescriptor
 ) {
   const { squareId } = clickedSquare;
-  const updatedQueens = boardState.queens.filter(id => id !== squareId);
+  const updatedQueens = boardState.queens.filter((id) => id !== squareId);
   return {
-    queens: updatedQueens
+    queens: updatedQueens,
   };
 }
 
@@ -98,7 +114,7 @@ function createBoardDescriptor(
   return {
     rows: Array.from({ length: boardSize }, (_, index) =>
       createRowDescriptor({ boardState, boardSize, index })
-    )
+    ),
   };
 }
 
@@ -112,7 +128,7 @@ function createRowDescriptor(params: {
     index,
     squares: Array.from({ length: boardSize }, (_, columnIndex) =>
       createSquareDescriptor({ boardState, rowIndex: index, columnIndex })
-    )
+    ),
   };
 }
 
@@ -128,7 +144,7 @@ function createSquareDescriptor(params: {
   return {
     squareId,
     color,
-    content
+    content,
   };
 }
 
@@ -140,12 +156,12 @@ function retrieveSquareId({ rowIndex, columnIndex }: SquareCoordinates) {
 }
 
 function createSquareId(
-  params: Pick<SquareId, "key" | "rowIndex" | "columnIndex">
+  params: Pick<SquareId, 'key' | 'rowIndex' | 'columnIndex'>
 ): SquareId {
   const { rowIndex, columnIndex } = params;
-  const diagonalIndices: SquareId["diagonalIndices"] = [
+  const diagonalIndices: SquareId['diagonalIndices'] = [
     rowIndex - columnIndex,
-    rowIndex + columnIndex + boardSize
+    rowIndex + columnIndex + boardSize,
   ];
   const squareId = (squareIds[params.key] = { ...params, diagonalIndices });
   return squareId;
@@ -158,7 +174,7 @@ function computeSquareColor({ rowIndex, columnIndex }: SquareCoordinates) {
 }
 
 function computeContent(boardState: BoardState, squareId: SquareId) {
-  const isQueen = boardState.queens.some(id => id === squareId);
+  const isQueen = boardState.queens.some((id) => id === squareId);
   if (isQueen) {
     return SquareContent.Queen;
   }
@@ -182,32 +198,32 @@ function checkIfBlocked(boardState: BoardState, squareId: SquareId) {
 function checkIfBlockedColumn(boardState: BoardState, squareId: SquareId) {
   const { columnIndex } = squareId;
   const blockedColumns = computeBlockedColumns(boardState);
-  return blockedColumns.some(blocked => blocked === columnIndex);
+  return blockedColumns.some((blocked) => blocked === columnIndex);
 }
 
 function computeBlockedColumns({ queens }: BoardState) {
-  return queens.map(squareId => squareId.columnIndex);
+  return queens.map((squareId) => squareId.columnIndex);
 }
 
 function checkIfBlockedRow(boardState: BoardState, squareId: SquareId) {
   const { rowIndex } = squareId;
   const blockedRows = computeBlockedRows(boardState);
-  return blockedRows.some(blocked => blocked === rowIndex);
+  return blockedRows.some((blocked) => blocked === rowIndex);
 }
 
 function computeBlockedRows({ queens }: BoardState) {
-  return queens.map(squareId => squareId.rowIndex);
+  return queens.map((squareId) => squareId.rowIndex);
 }
 
 function checkIfBlockedDiagonal(boardState: BoardState, squareId: SquareId) {
   const { diagonalIndices } = squareId;
   const blockedDiagonals = computeBlockedDiagonals(boardState);
-  return blockedDiagonals.some(blocked => diagonalIndices.includes(blocked));
+  return blockedDiagonals.some((blocked) => diagonalIndices.includes(blocked));
 }
 
 function computeBlockedDiagonals({ queens }: BoardState) {
   return queens
-    .map(squareId => squareId.diagonalIndices)
+    .map((squareId) => squareId.diagonalIndices)
     .reduce((prev, next) => prev.concat(next), [] as number[]);
 }
 
