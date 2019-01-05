@@ -12,20 +12,35 @@ import {
   SquareCoordinates,
 } from './types';
 
-import { findNQueensProblemSolution } from './n-queens-problem';
+import {
+  findNQueensProblemPartialSolution,
+  PartialQueens,
+  findNQueensProblemSolution,
+} from './n-queens-problem';
 import { Board } from './Board';
 
 import './App.css';
 
-const boardSize = 8;
+interface AppState {
+  boardState: BoardState;
+  calculationActive: boolean;
+  preview: boolean;
+}
 
-class App extends Component<{}, { boardState: BoardState }> {
+class App extends Component<{}, AppState> {
+  private partialSolution: PartialQueens | undefined;
+  private queuedCalculation: number | undefined;
+
   constructor(props: any) {
     super(props);
 
     this.state = {
-      boardState: createBoardStateWithSolution(),
+      boardState: createEmptyBoardState(8),
+      calculationActive: false,
+      preview: true,
     };
+
+    this.partialSolution = undefined;
   }
 
   handleSquareClick = (clickedSquare: SquareDescriptor) => {
@@ -37,10 +52,38 @@ class App extends Component<{}, { boardState: BoardState }> {
 
   render() {
     const { boardState } = this.state;
-    const boardDescriptor = createBoardDescriptor(boardState, boardSize);
+    const boardSize = boardState.size;
+    const boardDescriptor = createBoardDescriptor(boardState);
     const counter = boardState.queens.length;
     return (
       <div className="App">
+        <div>
+          <input
+            type="number"
+            value={boardSize}
+            onChange={(event) => this.onBoardSizeChange(event)}
+          />
+          <button type="button" onClick={() => this.startBlockingCalculation()}>
+            Fast (blocking)
+          </button>
+          <button type="button" onClick={() => this.startCalculation()}>
+            Start
+          </button>
+          <button type="button" onClick={() => this.pauseCalculation()}>
+            Pause
+          </button>
+          <button type="button" onClick={() => this.stopCalculation()}>
+            Stop
+          </button>
+          <label>
+            <input
+              type="checkbox"
+              checked={this.state.preview}
+              onChange={(event) => this.onPreviewChange(event)}
+            />{' '}
+            Preview
+          </label>
+        </div>
         <Board
           descriptor={boardDescriptor}
           onSquareClick={this.handleSquareClick}
@@ -50,31 +93,184 @@ class App extends Component<{}, { boardState: BoardState }> {
       </div>
     );
   }
+
+  private onBoardSizeChange(event: React.ChangeEvent<HTMLInputElement>) {
+    this.resetBoardWithNewSize(Number(event.target.value));
+  }
+
+  private onPreviewChange(event: React.ChangeEvent<HTMLInputElement>) {
+    this.setState({
+      preview: event.target.checked,
+    });
+  }
+
+  private resetBoardWithNewSize(size: number) {
+    this.partialSolution = undefined;
+    this.setState({
+      boardState: createEmptyBoardState(size),
+    });
+  }
+
+  private startBlockingCalculation() {
+    const { boardState } = this.state;
+    const solution = findNQueensProblemSolution(boardState.size);
+    
+    Maybe(solution)
+      .map((queensCoordinates) =>
+        queensCoordinates.map(({ row, column }) =>
+          retrieveSquareId({ boardState, rowIndex: row, columnIndex: column })
+        )
+      )
+      .map(
+        (queens): BoardState => ({
+          ...boardState,
+          queens,
+        })
+      )
+      .defaultValue(createEmptyBoardState(boardState.size))
+      .do((boardState) => {
+        this.setState({ boardState });
+      });
+  }
+
+  private startCalculation() {
+    this.setState({
+      calculationActive: true,
+    });
+
+    this.iterateCalculation();
+  }
+
+  private pauseCalculation() {
+    this.setState({
+      calculationActive: false,
+    });
+
+    clearTimeout(this.queuedCalculation);
+    this.queuedCalculation = undefined;
+    this.updateBoardStateWithPartialSolution();
+  }
+
+  private stopCalculation() {
+    this.pauseCalculation();
+    this.partialSolution = undefined;
+  }
+
+  private iterateCalculation() {
+    if (this.queuedCalculation) {
+      return;
+    }
+
+    this.queuedCalculation = setTimeout(() => {
+      this.queuedCalculation = undefined;
+      if (!this.state.calculationActive) {
+        return;
+      }
+      this.computeNextPartialSolution();
+      if (this.state.preview) {
+        this.updateBoardStateWithPartialSolution();
+      }
+
+      const solutionFound = this.checkIfSolutionFound();
+      if (solutionFound) {
+        this.updateBoardStateWithPartialSolution();
+        this.stopCalculation();
+      } else {
+        this.iterateCalculation();
+      }
+    });
+  }
+
+  private computeNextPartialSolution() {
+    const solutionFound = this.checkIfSolutionFound();
+
+    if (solutionFound) {
+      return;
+    }
+
+    if (this.partialSolution) {
+      this.partialSolution = this.partialSolution.continue();
+    } else {
+      const { boardState } = this.state;
+      this.partialSolution = findNQueensProblemPartialSolution(boardState.size);
+    }
+  }
+
+  private checkIfSolutionFound(): boolean {
+    return Boolean(this.partialSolution && this.partialSolution.isSolution);
+  }
+
+  private updateBoardStateWithPartialSolution(): void {
+    const { boardState } = this.state;
+    Maybe(this.partialSolution)
+      .map(({ solutionCandidate }) => solutionCandidate)
+      .map((queensCoordinates) =>
+        queensCoordinates.map(({ row, column }) =>
+          retrieveSquareId({ boardState, rowIndex: row, columnIndex: column })
+        )
+      )
+      .map(
+        (queens): BoardState => ({
+          ...boardState,
+          queens,
+        })
+      )
+      .defaultValue(createEmptyBoardState(boardState.size))
+      .do((boardState) => {
+        this.setState({ boardState });
+      });
+  }
 }
 
-function createBoardStateWithSolution(): BoardState {
-  return Maybe(findNQueensProblemSolution(boardSize))
-    .map((queensCoordinates) =>
-      queensCoordinates.map(({ row, column }) =>
-        retrieveSquareId({ rowIndex: row, columnIndex: column })
+function createEmptyBoardState(size: number): BoardState {
+  return {
+    size,
+    queens: [],
+    squares: createAllSquares(size),
+  };
+}
+
+function createAllSquares(boardSize: number): BoardState['squares'] {
+  const sequence = Array.from({ length: boardSize }, (_, i) => i);
+  return sequence
+    .map((rowIndex) =>
+      sequence.map(
+        (columnIndex): SquareId =>
+          createSquareId({ rowIndex, columnIndex }, boardSize)
       )
     )
-    .map((queens) => ({
-      queens,
-    }))
-    .getValue(createEmptyBoardState());
+    .reduce(
+      (
+        prev: BoardState['squares'],
+        next: SquareId[]
+      ): BoardState['squares'] => {
+        next.forEach((square) => (prev[square.key] = square));
+        return prev;
+      },
+      {}
+    );
 }
 
-function createEmptyBoardState(): BoardState {
+function createSquareId(
+  { rowIndex, columnIndex }: SquareCoordinates,
+  boardSize: number
+): SquareId {
+  const diagonalIndices: SquareId['diagonalIndices'] = [
+    rowIndex - columnIndex,
+    rowIndex + columnIndex + boardSize,
+  ];
   return {
-    queens: [],
+    key: squareKey({ rowIndex, columnIndex }),
+    rowIndex,
+    columnIndex,
+    diagonalIndices,
   };
 }
 
 function updateBoardState(
   boardState: BoardState,
   clickedSquare: SquareDescriptor
-) {
+): BoardState {
   switch (clickedSquare.content) {
     case SquareContent.Empty:
       return addQueenToBoard(boardState, clickedSquare);
@@ -88,10 +284,11 @@ function updateBoardState(
 function addQueenToBoard(
   boardState: BoardState,
   clickedSquare: SquareDescriptor
-) {
+): BoardState {
   const { squareId } = clickedSquare;
   const updatedQueens = [...boardState.queens, squareId];
   return {
+    ...boardState,
     queens: updatedQueens,
   };
 }
@@ -99,18 +296,17 @@ function addQueenToBoard(
 function removeQueenFromBoard(
   boardState: BoardState,
   clickedSquare: SquareDescriptor
-) {
+): BoardState {
   const { squareId } = clickedSquare;
   const updatedQueens = boardState.queens.filter((id) => id !== squareId);
   return {
+    ...boardState,
     queens: updatedQueens,
   };
 }
 
-function createBoardDescriptor(
-  boardState: BoardState,
-  boardSize: number
-): BoardDescriptor {
+function createBoardDescriptor(boardState: BoardState): BoardDescriptor {
+  const boardSize = boardState.size;
   return {
     rows: Array.from({ length: boardSize }, (_, index) =>
       createRowDescriptor({ boardState, boardSize, index })
@@ -138,7 +334,7 @@ function createSquareDescriptor(params: {
   columnIndex: number;
 }) {
   const { boardState, rowIndex, columnIndex } = params;
-  const squareId = retrieveSquareId({ rowIndex, columnIndex });
+  const squareId = retrieveSquareId(params);
   const color = computeSquareColor({ rowIndex, columnIndex });
   const content = computeContent(boardState, squareId);
   return {
@@ -148,23 +344,18 @@ function createSquareDescriptor(params: {
   };
 }
 
-const squareIds: Record<string, SquareId> = {};
-
-function retrieveSquareId({ rowIndex, columnIndex }: SquareCoordinates) {
-  const key = `${rowIndex}/${columnIndex}`;
-  return squareIds[key] || createSquareId({ key, rowIndex, columnIndex });
+function retrieveSquareId(params: {
+  boardState: BoardState;
+  rowIndex: number;
+  columnIndex: number;
+}) {
+  const { boardState, rowIndex, columnIndex } = params;
+  const key = squareKey({ rowIndex, columnIndex });
+  return boardState.squares[key];
 }
 
-function createSquareId(
-  params: Pick<SquareId, 'key' | 'rowIndex' | 'columnIndex'>
-): SquareId {
-  const { rowIndex, columnIndex } = params;
-  const diagonalIndices: SquareId['diagonalIndices'] = [
-    rowIndex - columnIndex,
-    rowIndex + columnIndex + boardSize,
-  ];
-  const squareId = (squareIds[params.key] = { ...params, diagonalIndices });
-  return squareId;
+function squareKey({ rowIndex, columnIndex }: SquareCoordinates): string {
+  return `${rowIndex}/${columnIndex}`;
 }
 
 function computeSquareColor({ rowIndex, columnIndex }: SquareCoordinates) {

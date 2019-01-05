@@ -35,5 +35,7 @@ export interface SquareDescriptor {
 }
 
 export interface BoardState {
+  size: number;
+  squares: Record<string, SquareId>;
   queens: SquareId[];
 }

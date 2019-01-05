@@ -1,44 +1,84 @@
 import Maybe from '@pawbor/maybe';
 
-import aStar from './a-star';
+import {
+  resolvePartiallyWithBacktracking,
+  PartialSolution,
+  resolveWithBacktracking,
+} from './backtracking';
 
 interface SquareCoordinates {
   column: number;
   row: number;
 }
 
-type Solution = SquareCoordinates[];
+type Queens = SquareCoordinates[];
 
 interface GraphNode {
-  solution: Solution;
+  queens: Queens;
   numberOfQueens: number;
   numberOfAvailableSquares: number;
   availableSquares: SquareCoordinates[];
 }
 
-export function findNQueensProblemSolution(n: number): Solution | undefined {
+export type PartialQueens = PartialSolution<Queens>;
+
+export function findNQueensProblemSolution(n: number): Queens | undefined {
   const goal = n;
   const boardSize = n;
 
-  const path = aStar({
-    startNode: createEmptyGraphNode(boardSize),
-    graphTools: {
-      checkIfGoalReached: (node) => node.numberOfQueens === goal,
-      computeNodesDistance: (from) => -from.numberOfAvailableSquares,
-      estimateGoalDistance: (node) => -node.numberOfAvailableSquares,
-      findNeighbors: (previousNode) => generateNeighbors(previousNode),
-    },
-  });
+  const solutionNode = resolveWithBacktracking(
+    createEmptyGraphNode(boardSize),
+    {
+      checkIfSolution: (candidate) => candidate.numberOfQueens === goal,
+      findSortedSuccessors: (node) =>
+        generateNeighbors(node).sort(
+          (n1, n2) => n2.numberOfAvailableSquares - n1.numberOfAvailableSquares
+        ),
+    }
+  );
 
-  return Maybe(path.slice(-1)[0])
-    .map((node) => node.solution)
+  return Maybe(solutionNode)
+    .map(({ queens }) => queens)
     .getRawValue();
+}
+
+export function findNQueensProblemPartialSolution(n: number): PartialQueens {
+  const goal = n;
+  const boardSize = n;
+
+  const solutionNode = resolvePartiallyWithBacktracking(
+    createEmptyGraphNode(boardSize),
+    {
+      checkIfSolution: (candidate) => candidate.numberOfQueens === goal,
+      findSortedSuccessors: (node) =>
+        generateNeighbors(node).sort(
+          (n1, n2) => n2.numberOfAvailableSquares - n1.numberOfAvailableSquares
+        ),
+    }
+  );
+
+  return convertPartialSolution(solutionNode);
+}
+
+function convertPartialSolution(
+  solutionNode: PartialSolution<GraphNode>
+): PartialQueens {
+  return {
+    isSolution: solutionNode.isSolution,
+    solutionCandidate: Maybe(solutionNode.solutionCandidate)
+      .map(({ queens }) => queens)
+      .getRawValue(),
+    continue: () => {
+      const partialGraphNode = solutionNode.continue();
+      return convertPartialSolution(partialGraphNode);
+    },
+  };
 }
 
 function createEmptyGraphNode(boardSize: number): GraphNode {
   const availableSquares = generateAllCoordinates(boardSize);
   return {
-    solution: [],
+    queens: [],
     numberOfQueens: 0,
     numberOfAvailableSquares: availableSquares.length,
     availableSquares,
@@ -55,7 +95,7 @@ function generateAllCoordinates(boardSize: number): SquareCoordinates[] {
 }
 
 function generateNeighbors(previousNode: GraphNode): GraphNode[] {
-  const nextRow = Maybe(previousNode.solution.slice(-1)[0])
+  const nextRow = Maybe(previousNode.queens.slice(-1)[0])
     .map((coordinates) => coordinates.row + 1)
     .getValue(0);
   return previousNode.availableSquares
@@ -73,7 +113,7 @@ function createGraphNode(
   );
 
   return {
-    solution: [...previousNode.solution, coordinates],
+    queens: [...previousNode.queens, coordinates],
     numberOfQueens: previousNode.numberOfQueens + 1,
     numberOfAvailableSquares: availableSquares.length,
     availableSquares,
